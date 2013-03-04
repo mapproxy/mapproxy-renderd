@@ -2,6 +2,7 @@ import heapq
 import time
 import threading
 import Queue
+import uuid
 
 class Task(object):
     """
@@ -12,11 +13,12 @@ class Task(object):
         (e.g. requests for the same meta tile)
     :param doc: the task as JSON
     """
-    def __init__(self, id, doc, sender=None, priority=None):
+    def __init__(self, id, doc, resp_queue=None, priority=None):
         self.id = id
+        self._uid = uuid.uuid4().hex
         self.doc = doc
-        self.sender = sender
         self.priority = priority
+        self.resp_queue = resp_queue
 
     def __repr__(self):
         return '<Task id=%s, priority=%s>' % (self.id, self.priority)
@@ -64,7 +66,7 @@ class RenderQueue(object):
         """
         return task in self.running_tasks
 
-    def move_next_to_running(self):
+    def next(self):
         """
         Returns the next task to run. Marks the task as running.
         """
@@ -77,7 +79,7 @@ class RunningTasks(object):
     """
     Store running tasks and group them by ``task.id``.
     """
-    def __init__(self, process_min_priorities=[0, 0, 0, 0]):
+    def __init__(self, process_min_priorities):
         self.running = {}
         self.process_min_priorities = sorted(process_min_priorities)
 
