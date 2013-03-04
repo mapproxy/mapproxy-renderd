@@ -15,10 +15,11 @@ class Task(object):
     """
     def __init__(self, id, doc, resp_queue=None, priority=None):
         self.id = id
-        self._uid = uuid.uuid4().hex
         self.doc = doc
         self.priority = priority
         self.resp_queue = resp_queue
+        self.request_id = uuid.uuid4().hex
+        self.worker_id = None
 
     def __repr__(self):
         return '<Task id=%s, priority=%s>' % (self.id, self.priority)

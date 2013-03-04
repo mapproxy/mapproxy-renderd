@@ -3,7 +3,7 @@ from mp_renderd.queue import PriorityTaskQueue, Task, RunningTasks, RenderQueue
 from nose.tools import raises, eq_
 
 def task(name, priority=None):
-    return Task(id=name, doc=name, sender=['sender'], priority=priority)
+    return Task(id=name, doc=name, priority=priority)
 
 class TestPriorityTaskQueue(object):
     def test_empty(self):
@@ -61,11 +61,11 @@ class TestRunningTasks(object):
 
     @raises(KeyError)
     def test_remove_unknown_id(self):
-        r = RunningTasks()
+        r = RunningTasks([0, 0, 0])
         r.remove('foo')
 
     def test_add(self):
-        r = RunningTasks()
+        r = RunningTasks([0, 0, 0])
         eq_(len(r), 0)
         r.add(task('bar'))
         eq_(len(r), 1)
@@ -75,7 +75,7 @@ class TestRunningTasks(object):
         eq_(len(r), 0)
 
     def test_add_waitinglist(self):
-        r = RunningTasks()
+        r = RunningTasks([0, 0, 0])
 
         t = task('foo')
         assert t not in r
@@ -134,11 +134,11 @@ class TestRenderQueue(object):
         q = RenderQueue([0], default_priority=50)
         q.add(task('low1', 0))
         q.add(task('low2', 0))
-        q.move_next_to_running()
+        q.next()
 
         assert not q.has_new_tasks()
         try:
-            q.move_next_to_running()
+            q.next()
         except AssertionError:
             pass
         else:
@@ -160,13 +160,13 @@ class TestRenderQueue(object):
 
         assert not q.already_running(t1)
         assert not q.already_running(t2)
-        eq_(q.move_next_to_running(), t1)
+        eq_(q.next(), t1)
         eq_(q.running, 1)
         eq_(q.waiting, 1)
 
         assert not q.already_running(t1)
         assert q.already_running(t2)
-        eq_(q.move_next_to_running(), t2)
+        eq_(q.next(), t2)
         eq_(q.running, 1)
         eq_(q.waiting, 0)
 
@@ -187,7 +187,7 @@ class TestRenderQueue(object):
         # [low1, low2, low3], []
         eq_(q.waiting, 3)
 
-        eq_(q.move_next_to_running(), tl1)
+        eq_(q.next(), tl1)
         assert not q.has_new_tasks()
         # [low2, low3], [low1]
         eq_(q.waiting, 2)
@@ -197,14 +197,14 @@ class TestRenderQueue(object):
         q.add(tm2)
         # [tm2, tm1, low2, low3], [low1]
         assert q.has_new_tasks()
-        eq_(q.move_next_to_running(), tm2)
+        eq_(q.next(), tm2)
         assert not q.has_new_tasks()
         # [tm1, low2, low3], [low1, tm2]
 
         q.remove(tl1.id)
         # [tm1, low2, low3], [tm2]
         assert q.has_new_tasks()
-        eq_(q.move_next_to_running(), tm1)
+        eq_(q.next(), tm1)
         # [low2, low3], [tm2, tm1]
 
         assert not q.has_new_tasks()
@@ -215,9 +215,9 @@ class TestRenderQueue(object):
         q.remove(tm2.id)
         # [low2, low3], []
         assert q.has_new_tasks()
-        eq_(q.move_next_to_running(), tl2)
+        eq_(q.next(), tl2)
         assert not q.has_new_tasks()
         q.remove(tl2.id)
         assert q.has_new_tasks()
-        eq_(q.move_next_to_running(), tl3)
+        eq_(q.next(), tl3)
 

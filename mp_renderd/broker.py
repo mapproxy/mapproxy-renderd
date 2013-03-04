@@ -1,40 +1,100 @@
+import os
 import multiprocessing
 import time
 import collections
 import Queue
 import threading
+import uuid
 
 from mp_renderd.queue import STOP, fan_in_queue, RenderQueue, Task
 
 import logging
 log = logging.getLogger(__name__)
 
-class Worker(multiprocessing.Process):
+class BaseWorker(multiprocessing.Process):
     def __init__(self, in_queue, out_queue):
         self.in_queue = in_queue
         self.out_queue = out_queue
+        self.id = uuid.uuid4().hex
         multiprocessing.Process.__init__(self)
         self.daemon = True
 
+    def dispatch(self, task):
+        task.worker_id = self.id
+        self.in_queue.put(task)
+
     def run(self):
+        log.debug('proc %d started', os.getpid())
         while True:
-            wait = self.in_queue.get()
-            if wait == STOP:
-                break
-            # print 'processing', wait
-            time.sleep(wait.doc)
-            self.out_queue.put(wait)
+            try:
+                if not self.handle_task_message():
+                    return
+            except KeyboardInterrupt:
+                return
 
-WorkerData = collections.namedtuple('WorkerData', ['queue', 'process'])
+    def handle_task_message(self):
+        task = self.in_queue.get()
+        if task == STOP:
+            return False
 
-# class AvailableWorkers(object):
-#     def __init__(self, workers):
-#         self.workers = dict((hash(w), w) for w in workers)
-#         self.available = set(workers)
-#         self.inuse = set()
+        req_doc = task.doc
+        command = req_doc.get('command', 'None')
+        method = getattr(self, 'do_' + command, None)
+        if not method:
+            resp = {
+                'status': 'error',
+                'error_message': 'unknown command: %s' % command
+            }
+        else:
+            try:
+                resp = method(req_doc)
+                if resp is None:
+                    resp = {}
+            except Exception, ex:
+                resp = {
+                    'status': 'error',
+                    'error_message': repr(ex)
+                }
+            else:
+                if not resp.get('status'):
+                    resp['status'] = 'ok'
+
+        # resp['id'] = req_doc['id']
+        # resp['uid'] = req_doc['uid']
+        # resp['_worker_id'] = req_doc['_worker_id']
+
+        task.doc = resp
+        self.out_queue.put(task)
+        return True
 
 
+class SleepWorker(BaseWorker):
+    def __init__(self, **kw):
+        BaseWorker.__init__(self, **kw)
 
+    def do_sleep(self, doc):
+        time.sleep(doc['time'])
+        return {}
+
+class SeedWorker(BaseWorker):
+    def __init__(self, caches, base_config, **kw):
+        self.caches = caches
+        self.base_config = base_config
+        BaseWorker.__init__(self, **kw)
+
+    def do_tile(self, doc):
+        from mapproxy.util import local_base_config
+
+        cache = self.caches.get(doc['cache_identifier'])
+        if not cache:
+            return {
+                'status': 'error',
+                'error_message': 'unknown cache %s' % doc['cache_identifier']
+            }
+
+        tiles = [tuple(coord) for coord in doc['tiles'] if coord]
+        with local_base_config(self.base_config):
+            cache.load_tile_coords(tiles)
 
 class WorkerPool(object):
     """
@@ -83,16 +143,16 @@ class WorkerPool(object):
         log.debug('starting processes')
         for i in xrange(self.pool_size - len(self.processes)):
             task_queue = multiprocessing.Queue()
-            p = self.worker_factory(task_queue, self.result_queue)
+            p = self.worker_factory(in_queue=task_queue, out_queue=self.result_queue)
             p.start()
-            self.processes[hash(p)] = (task_queue, p)
+            self.processes[p.id] = (task_queue, p)
             self.available.add(p)
 
     def clear_dead_processes(self):
         for proc in self.processes[:]:
             if not proc.is_alive():
-                self.available.remove(hash(proc))
-                self.processes.remove(proc)
+                self.available.remove(proc.id)
+                self.processes.remove(proc.id)
 
     def check_processes(self):
         self.clear_dead_processes()
@@ -109,10 +169,10 @@ class WorkerPool(object):
 STOP_BROKER = '696054488d18402b9155a531e0a31714'
 
 class Broker(threading.Thread):
-    def __init__(self, worker):
+    def __init__(self, worker, render_queue):
         threading.Thread.__init__(self)
         self.task_in_queue = Queue.Queue()
-        self.render_queue = RenderQueue([0, 0, 10, 20])
+        self.render_queue = render_queue
 
         self.response_queues = {}
         self.worker = worker
@@ -120,8 +180,8 @@ class Broker(threading.Thread):
 
         self.read_queue = fan_in_queue([self.result_queue, self.task_in_queue])
 
-    def dispatch(self, task):
-        self.task_in_queue.put(task)
+    def dispatch(self, task, response_queue):
+        self.task_in_queue.put((task, response_queue))
 
     def shutdown(self):
         self.task_in_queue.put(STOP_BROKER)
@@ -131,28 +191,33 @@ class Broker(threading.Thread):
         while True:
             src, data = self.read_queue.get()
 
-            if src == self.result_queue:
-                print 'result', data
-                worker_id = data.sender
-                self.worker.put(worker_id)
-                self.render_queue.remove(data.id)
-                response_queue = self.response_queues.pop(data._uid)
-                response_queue.put(data)
-
-            elif src == self.task_in_queue:
+            # new tasks
+            if src == self.task_in_queue:
                 if data == STOP_BROKER:
                     shutdown = True
                 else:
-                    resp_queue = data.resp_queue
-                    data.resp_queue = None
-                    self.response_queues[data._uid] = resp_queue
-                    self.render_queue.add(data)
+                    task, resp_queue = data
+                    log.info('new task (prio: %s): %s %s ', task.priority, task.id, task.doc)
+                    self.response_queues[task.request_id] = resp_queue
+                    self.render_queue.add(task)
 
-            if self.render_queue.has_new_tasks() and self.worker.is_available():
-                w = self.worker.get()
-                task = self.render_queue.next()
-                task.sender = hash(w)
-                w.in_queue.put(task)
+            # results from workers
+            elif src == self.result_queue:
+                log.info('result from %s (prio: %s): %s %s', data.worker_id, data.priority, data.id, data.doc)
+                self.worker.put(data.worker_id)
+                orig_requests = self.render_queue.remove(data.id)
+                for req in orig_requests:
+                    response_queue = self.response_queues.pop(req.request_id)
+                    response_queue.put(data)
+
+            while True:
+                if self.render_queue.has_new_tasks() and self.worker.is_available():
+                    task = self.render_queue.next()
+                    if self.render_queue.already_running(task):
+                        continue
+                    w = self.worker.get()
+                    w.dispatch(task)
+                break
 
             if not self.render_queue.running and not self.render_queue.has_new_tasks() and shutdown:
                 break
@@ -161,29 +226,38 @@ class Broker(threading.Thread):
 
 def main():
 
-    worker_pool = WorkerPool(Worker, 10)
+    logging.basicConfig(level=logging.DEBUG)
+
+    worker_pool = WorkerPool(SleepWorker, 2)
 
     b = Broker(worker_pool)
     b.start()
 
-    resp_queue = Queue.Queue()
+    response_queue = Queue.Queue()
 
-    n = 30
+    n = 5
+
+    # for i in range(n):
+    #     if i % 2:
+    #         b.dispatch(Task(i+1, {'command': 'sleep', 'time': 0.5}, priority=10), response_queue=response_queue)
+    #     else:
+    #         b.dispatch(Task(i, {'command': 'sleep', 'time': 0.05}, priority=20), response_queue=response_queue)
+    #     time.sleep(0.02)
+
+    # for i in range(n):
+    #     if i % 2:
+    #         b.dispatch(Task(i+1, {'command': 'sleep', 'time': 0.2}, priority=10), response_queue=response_queue)
+    #     else:
+    #         b.dispatch(Task(i, {'command': 'sleep', 'time': 0.02}, priority=20), response_queue=response_queue)
+    #     time.sleep(0.02)
 
     for i in range(n):
-        if i % 2:
-            b.dispatch(Task(i, 0.5, priority=10, resp_queue=resp_queue))
-        else:
-            b.dispatch(Task(i, 0.05, priority=20, resp_queue=resp_queue))
-
-    for i in range(n):
-        if i % 2:
-            b.dispatch(Task(i, 0.2, priority=10, resp_queue=resp_queue))
-        else:
-            b.dispatch(Task(i, 0.02, priority=20, resp_queue=resp_queue))
+        b.dispatch(Task(i, {'command': 'sleep', 'time': 0.5}, priority=20), response_queue=response_queue)
+        b.dispatch(Task(i, {'command': 'sleep', 'time': 0.05}, priority=30), response_queue=response_queue)
+        time.sleep(0.02)
 
     for i in range(n*2):
-        print resp_queue.get()
+        response_queue.get()
     b.shutdown()
 
     # for i in range(n):
