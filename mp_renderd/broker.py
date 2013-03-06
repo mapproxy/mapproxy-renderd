@@ -82,6 +82,13 @@ class SeedWorker(BaseWorker):
         self.base_config = base_config
         BaseWorker.__init__(self, **kw)
 
+    def do_sleep(self, doc):
+        time.sleep(doc['time'])
+        return {}
+
+    def do_echo(self, doc):
+        return doc
+
     def do_tile(self, doc):
         from mapproxy.util import local_base_config
 
