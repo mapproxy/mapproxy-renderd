@@ -3,12 +3,15 @@ import os
 import sys
 import atexit
 import optparse
+import Queue
 import multiprocessing
 
+from mp_renderd.queue import Task
 from mp_renderd.broker import Broker, WorkerPool, SeedWorker, RenderQueue
 from mapproxy.config.loader import load_configuration
 
 import logging
+from mp_renderd.wsgi import Request
 log = logging.getLogger(__name__)
 
 def init_logging(log_config_file=None, verbose=False):
@@ -47,6 +50,12 @@ def main():
     init_logging(options.log_config_file, options.verbose)
 
     conf = load_configuration(options.conf_file, renderd=True)
+    broker_address = conf.globals.renderd_address
+    if not broker_address:
+        fatal('mapproxy config (%s) does not define renderd address' % (
+            options.conf_file))
+    broker_address = broker_address.replace('localhost', '127.0.0.1')
+    broker_port = int(broker_address.rsplit(':', 1)[1]) # TODO
 
     tile_managers = {}
     with conf:
@@ -86,9 +95,35 @@ def main():
 
     try:
         broker = Broker(worker_pool, task_queue)
-        broker.run()
+        broker.start()
+
+        def app(environ, start_response):
+            req = Request(environ)
+            import json
+            req = json.loads(req.body())
+            log.info('got request: %s', req)
+
+            req_id = req.get('id')
+            if not req_id:
+                import uuid
+                req_id = uuid.uuid4().hex
+            resp = broker.dispatch(Task(req_id, req, priority=req.get('priority', 10)))
+            log.info('got resp: %s', resp)
+            start_response('200 OK', [('Content-type', 'application/json')])
+            return json.dumps(resp.doc)
+
+        from mp_renderd.wsgi import CherryPyWSGIServer
+        server = CherryPyWSGIServer(
+                ('0.0.0.0', broker_port), app,
+                numthreads=64,
+                request_queue_size=64,
+        )
+        server.start()
+
     except KeyboardInterrupt:
         print >>sys.stderr, 'exiting...'
+        if server:
+            server.stop()
         return 2
     except Exception:
         log.fatal('fatal error, terminating', exc_info=True)
