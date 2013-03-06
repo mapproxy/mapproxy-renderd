@@ -1,27 +1,35 @@
-# from mp_renderd.broker import AvailableWorkers, WorkerData
+import multiprocessing
+import uuid
+from mp_renderd.broker import WorkerPool
 
-# def test_available_worker():
-#     workers = [
-#         WorkerData(queue='q1', process='p1'),
-#         WorkerData(queue='q2', process='p2'),
-#     ]
-#     pool = AvailableWorkers(workers)
+class DummyWorker(multiprocessing.Process):
+    def __init__(self, in_queue, out_queue):
+        self.id = uuid.uuid4().hex
+        multiprocessing.Process.__init__(self)
 
-#     assert pool.is_available()
-#     w1 = pool.get()
-#     assert w1 in workers
-#     assert pool.is_available()
+def test_available_worker():
+    pool = WorkerPool(DummyWorker, 2)
 
-#     w2 = pool.get()
-#     assert w2 in workers
-#     assert not pool.is_available()
+    assert pool.is_available()
+    w1 = pool.get()
+    assert pool.is_available()
 
-#     assert w1 != w2
+    w2 = pool.get()
+    assert not pool.is_available()
 
-#     pool.put(hash(w2))
-#     assert pool.is_available()
+    try:
+        pool.get()
+    except KeyError:
+        pass
+    else:
+        assert False, 'expected KeyError'
 
-#     w3 = pool.get()
-#     assert not pool.is_available()
+    assert w1 != w2
 
-#     assert w2 is w3
+    pool.put(w2.id)
+    assert pool.is_available()
+
+    w3 = pool.get()
+    assert not pool.is_available()
+
+    assert w2 is w3
