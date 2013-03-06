@@ -178,6 +178,7 @@ STOP_BROKER = '696054488d18402b9155a531e0a31714'
 class Broker(threading.Thread):
     def __init__(self, worker, render_queue):
         threading.Thread.__init__(self)
+        self.daemon = True
         self.task_in_queue = Queue.Queue()
         self.render_queue = render_queue
 
@@ -187,8 +188,16 @@ class Broker(threading.Thread):
 
         self.read_queue = fan_in_queue([self.result_queue, self.task_in_queue])
 
-    def dispatch(self, task, response_queue):
-        self.task_in_queue.put((task, response_queue))
+    def dispatch(self, task, response_queue=None):
+        if response_queue is None:
+            q = Queue.Queue()
+            self.task_in_queue.put((task, q))
+            return q.get()
+        else:
+            self.task_in_queue.put((task, response_queue))
+
+    def dispatch_background(self, task):
+        self.task_in_queue.put((task, None))
 
     def shutdown(self):
         self.task_in_queue.put(STOP_BROKER)
@@ -215,7 +224,8 @@ class Broker(threading.Thread):
                 orig_requests = self.render_queue.remove(data.id)
                 for req in orig_requests:
                     response_queue = self.response_queues.pop(req.request_id)
-                    response_queue.put(data)
+                    if response_queue:
+                        response_queue.put(data)
 
             while True:
                 if self.render_queue.has_new_tasks() and self.worker.is_available():
@@ -228,6 +238,8 @@ class Broker(threading.Thread):
 
             if not self.render_queue.running and not self.render_queue.has_new_tasks() and shutdown:
                 break
+
+
 
 
 
