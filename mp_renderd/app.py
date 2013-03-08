@@ -3,7 +3,6 @@ import os
 import sys
 import atexit
 import optparse
-import Queue
 import multiprocessing
 
 from mp_renderd.queue import Task
@@ -112,18 +111,12 @@ def main():
             start_response('200 OK', [('Content-type', 'application/json')])
             return json.dumps(resp.doc)
 
-        from mp_renderd.wsgi import CherryPyWSGIServer
-        server = CherryPyWSGIServer(
-                ('0.0.0.0', broker_port), app,
-                numthreads=64,
-                request_queue_size=64,
-        )
-        server.start()
+        import eventlet
+        from eventlet import wsgi
+        wsgi.server(eventlet.listen(('127.0.0.1', broker_port)), app)
 
     except KeyboardInterrupt:
         print >>sys.stderr, 'exiting...'
-        if server:
-            server.stop()
         return 2
     except Exception:
         log.fatal('fatal error, terminating', exc_info=True)
