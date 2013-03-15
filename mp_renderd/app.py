@@ -98,12 +98,19 @@ def main():
         broker.start()
 
         app = RenderdApp(broker)
-        import eventlet
-        from eventlet import wsgi
-        wsgi.server(eventlet.listen(('127.0.0.1', broker_port)), app)
+
+        from mp_renderd.wsgi import CherryPyWSGIServer
+        server = CherryPyWSGIServer(
+                ('0.0.0.0', broker_port), app,
+                numthreads=64,
+                request_queue_size=256,
+        )
+        server.start()
 
     except KeyboardInterrupt:
         print >>sys.stderr, 'exiting...'
+        if server:
+            server.stop()
         return 2
     except Exception:
         log.fatal('fatal error, terminating', exc_info=True)

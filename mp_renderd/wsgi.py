@@ -9,7 +9,12 @@ import logging
 log = logging.getLogger(__name__)
 
 
-__all__ = ['Request']
+try:
+    from cherrypy.wsgiserver import CherryPyWSGIServer; CherryPyWSGIServer
+except ImportError:
+    from mp_renderd.ext.wsgiserver import CherryPyWSGIServer
+
+__all__ = ['CherryPyWSGIServer', 'Request']
 
 class Request(_Request):
     _body = None

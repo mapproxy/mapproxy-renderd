@@ -199,9 +199,8 @@ class Broker(threading.Thread):
     def dispatch_background(self, task):
         self.task_in_queue.put((task, None))
 
-    def stop(self):
+    def shutdown(self):
         self.task_in_queue.put(STOP_BROKER)
-        self.join()
 
     def run(self):
         shutdown = False
