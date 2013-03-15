@@ -1,5 +1,6 @@
 import uuid
 import json
+import textwrap
 
 from mp_renderd.queue import Task
 from mapproxy.request.base import Request as _Request
@@ -34,6 +35,8 @@ class RenderdApp(object):
         try:
             if req.path == '/':
                 resp = self.do_request(req)
+            elif req.path == '/status':
+                resp = self.do_status(req)
             else:
                 resp = Response(json.dumps({'status': 'error', 'error_message': 'endpoint not found'}),
                     content_type='application/json', status=404)
@@ -42,7 +45,6 @@ class RenderdApp(object):
                 content_type='application/json', status=500)
 
         return resp(environ, start_response)
-
 
     def do_request(self, req):
         req = json.loads(req.body())
@@ -54,3 +56,17 @@ class RenderdApp(object):
         resp = self.broker.dispatch(Task(req_id, req, priority=req.get('priority', 10)))
         log.info('got resp: %s', resp)
         return Response(json.dumps(resp.doc), content_type='application/json')
+
+    def do_status(self, req):
+        body = """\
+        running: %d
+        waiting: %d
+        worker: %d
+        """ % (
+            self.broker.render_queue.running,
+            self.broker.render_queue.waiting,
+            self.broker.worker.pool_size,
+        )
+        body = textwrap.dedent(body)
+
+        return Response(body, content_type='text/plain')
