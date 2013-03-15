@@ -5,12 +5,11 @@ import atexit
 import optparse
 import multiprocessing
 
-from mp_renderd.queue import Task
+from mp_renderd.wsgi import RenderdApp
 from mp_renderd.broker import Broker, WorkerPool, SeedWorker, RenderQueue
 from mapproxy.config.loader import load_configuration
 
 import logging
-from mp_renderd.wsgi import Request
 log = logging.getLogger(__name__)
 
 def init_logging(log_config_file=None, verbose=False):
@@ -21,6 +20,8 @@ def init_logging(log_config_file=None, verbose=False):
             disable_existing_loggers=False)
     else:
         if verbose:
+            logging.getLogger('mapproxy').setLevel(logging.INFO)
+            log.setLevel(logging.DEBUG)
             logging.basicConfig(level=logging.DEBUG)
         else:
             logging.basicConfig(level=logging.INFO)
@@ -96,21 +97,7 @@ def main():
         broker = Broker(worker_pool, task_queue)
         broker.start()
 
-        def app(environ, start_response):
-            req = Request(environ)
-            import json
-            req = json.loads(req.body())
-            log.info('got request: %s', req)
-
-            req_id = req.get('id')
-            if not req_id:
-                import uuid
-                req_id = uuid.uuid4().hex
-            resp = broker.dispatch(Task(req_id, req, priority=req.get('priority', 10)))
-            log.info('got resp: %s', resp)
-            start_response('200 OK', [('Content-type', 'application/json')])
-            return json.dumps(resp.doc)
-
+        app = RenderdApp(broker)
         import eventlet
         from eventlet import wsgi
         wsgi.server(eventlet.listen(('127.0.0.1', broker_port)), app)

@@ -214,13 +214,13 @@ class Broker(threading.Thread):
                     shutdown = True
                 else:
                     task, resp_queue = data
-                    log.info('new task (prio: %s): %s %s ', task.priority, task.id, task.doc)
+                    log.debug('new task (prio: %s): %s %s ', task.priority, task.id, task.doc)
                     self.response_queues[task.request_id] = resp_queue
                     self.render_queue.add(task)
 
             # results from workers
             elif src == self.result_queue:
-                log.info('result from %s (prio: %s): %s %s', data.worker_id, data.priority, data.id, data.doc)
+                log.debug('result from %s (prio: %s): %s %s', data.worker_id, data.priority, data.id, data.doc)
                 self.worker.put(data.worker_id)
                 orig_requests = self.render_queue.remove(data.id)
                 for req in orig_requests:
@@ -232,7 +232,11 @@ class Broker(threading.Thread):
                 if self.render_queue.has_new_tasks() and self.worker.is_available():
                     task = self.render_queue.next()
                     if self.render_queue.already_running(task):
+                        log.info('task %s already running - running: %d - waiting: %d',
+                            task.id, self.render_queue.running, self.render_queue.waiting)
                         continue
+                    log.info('distributing task %s (prio: %s) - running: %d - waiting: %d',
+                        task.id, task.priority, self.render_queue.running, self.render_queue.waiting)
                     w = self.worker.get()
                     w.dispatch(task)
                 break
