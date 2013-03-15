@@ -101,17 +101,17 @@ def main():
 
         from mp_renderd.wsgi import CherryPyWSGIServer
         server = CherryPyWSGIServer(
-                ('0.0.0.0', broker_port), app,
+                ('127.0.0.1', broker_port), app,
                 numthreads=64,
                 request_queue_size=256,
         )
         server.start()
 
-    except KeyboardInterrupt:
+    except (KeyboardInterrupt, SystemExit):
         print >>sys.stderr, 'exiting...'
         if server:
             server.stop()
-        return 2
+        return 0
     except Exception:
         log.fatal('fatal error, terminating', exc_info=True)
         raise
