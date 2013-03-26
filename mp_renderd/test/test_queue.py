@@ -1,4 +1,5 @@
-from mp_renderd.queue import PriorityTaskQueue, Task, RunningTasks, RenderQueue
+from mp_renderd.queue import PriorityTaskQueue, RunningTasks, RenderQueue
+from mp_renderd.task import Task
 
 from nose.tools import raises, eq_
 

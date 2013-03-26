@@ -5,9 +5,11 @@ import tempfile
 import shutil
 import random
 
-from mp_renderd.broker import BaseWorker, Broker, WorkerPool
+from mp_renderd.broker import Broker
+from mp_renderd.pool import WorkerPool
+from mp_renderd.worker import BaseWorker
 from mp_renderd.queue import RenderQueue
-from mp_renderd.queue import Task
+from mp_renderd.task import Task
 
 from nose.tools import eq_
 
@@ -41,7 +43,7 @@ class TestBroker(object):
         self.broker.start()
 
     def teardown(self):
-        self.broker.stop()
+        self.broker.shutdown()
 
     def test_worker_exception(self):
         resp = self.broker.dispatch(Task(1, {'command': 'exception'}))

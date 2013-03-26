@@ -1,6 +1,6 @@
 import multiprocessing
 import uuid
-from mp_renderd.broker import WorkerPool
+from mp_renderd.pool import WorkerPool
 
 class DummyWorker(multiprocessing.Process):
     def __init__(self, in_queue, out_queue):

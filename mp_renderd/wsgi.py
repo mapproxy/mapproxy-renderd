@@ -2,7 +2,7 @@ import uuid
 import json
 import textwrap
 
-from mp_renderd.queue import Task
+from mp_renderd.task import Task
 from mapproxy.request.base import Request as _Request
 from mapproxy.response import Response
 
