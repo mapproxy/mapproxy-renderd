@@ -36,14 +36,15 @@ class WorkerPool(object):
         return bool(self.available)
 
     def get(self):
-        worker = self.available.pop()
-        self.inuse.add(worker)
+        worker_id = self.available.pop()
+        _, worker = self.processes[worker_id]
+        self.inuse.add(worker_id)
         return worker
 
     def put(self, worker_id):
         worker = self.processes[worker_id][1]
-        self.inuse.remove(worker)
-        self.available.add(worker)
+        self.inuse.remove(worker.id)
+        self.available.add(worker.id)
 
     def start_processes(self):
         assert self.result_queue
@@ -53,13 +54,14 @@ class WorkerPool(object):
             p = self.worker_factory(in_queue=task_queue, out_queue=self.result_queue)
             p.start()
             self.processes[p.id] = (task_queue, p)
-            self.available.add(p)
+            self.available.add(p.id)
 
     def clear_dead_processes(self):
-        for proc in self.processes[:]:
+        for _, proc in self.processes.values():
+            print proc.id, self.available
             if not proc.is_alive():
                 self.available.remove(proc.id)
-                self.processes.remove(proc.id)
+                self.processes.pop(proc.id)
 
     def check_processes(self):
         self.clear_dead_processes()

@@ -1,3 +1,4 @@
+import time
 import Queue
 import threading
 
@@ -9,6 +10,8 @@ log = logging.getLogger(__name__)
 STOP_BROKER = '696054488d18402b9155a531e0a31714'
 
 class Broker(threading.Thread):
+    check_interval = 30
+
     def __init__(self, worker, render_queue):
         threading.Thread.__init__(self)
         self.daemon = True
@@ -37,8 +40,16 @@ class Broker(threading.Thread):
 
     def run(self):
         shutdown = False
+        next_check = time.time() + self.check_interval
         while True:
-            src, data = self.read_queue.get()
+            if next_check < time.time():
+                self.worker.check_processes()
+                next_check = time.time() + self.check_interval
+
+            try:
+                src, data = self.read_queue.get(timeout=10)
+            except Queue.Empty:
+                continue
 
             # new tasks
             if src == self.task_in_queue:
@@ -61,6 +72,7 @@ class Broker(threading.Thread):
                         response_queue.put(data)
 
             while True:
+                # distribute tasks to workers
                 if self.render_queue.has_new_tasks() and self.worker.is_available():
                     task = self.render_queue.next()
                     if self.render_queue.already_running(task):
