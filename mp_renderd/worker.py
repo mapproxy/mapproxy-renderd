@@ -1,6 +1,6 @@
 import os
 import multiprocessing
-import time
+import traceback
 import uuid
 
 from mp_renderd.queue import STOP
@@ -50,41 +50,24 @@ class BaseWorker(multiprocessing.Process):
             except Exception, ex:
                 resp = {
                     'status': 'error',
-                    'error_message': repr(ex)
+                    'error_message': "exception while processing '%s': %s"
+                        % (command, ex),
+                    'error_detail': traceback.format_exc()
                 }
             else:
                 if not resp.get('status'):
                     resp['status'] = 'ok'
-
-        # resp['id'] = req_doc['id']
-        # resp['uid'] = req_doc['uid']
-        # resp['_worker_id'] = req_doc['_worker_id']
 
         task.doc = resp
         self.out_queue.put(task)
         return True
 
 
-class SleepWorker(BaseWorker):
-    def __init__(self, **kw):
-        BaseWorker.__init__(self, **kw)
-
-    def do_sleep(self, doc):
-        time.sleep(doc['time'])
-        return {}
-
 class SeedWorker(BaseWorker):
     def __init__(self, caches, base_config, **kw):
         self.caches = caches
         self.base_config = base_config
         BaseWorker.__init__(self, **kw)
-
-    def do_sleep(self, doc):
-        time.sleep(doc['time'])
-        return {}
-
-    def do_echo(self, doc):
-        return doc
 
     def do_tile(self, doc):
         from mapproxy.util import local_base_config
@@ -93,7 +76,7 @@ class SeedWorker(BaseWorker):
         if not cache:
             return {
                 'status': 'error',
-                'error_message': 'unknown cache %s' % doc['cache_identifier']
+                'error_message': "unknown cache '%s'" % doc['cache_identifier']
             }
 
         tiles = [tuple(coord) for coord in doc['tiles'] if coord]

@@ -1,7 +1,13 @@
-from mp_renderd.queue import PriorityTaskQueue, RunningTasks, RenderQueue
+import Queue
+from mp_renderd.queue import (
+    PriorityTaskQueue,
+    RunningTasks,
+    RenderQueue,
+    fan_in_queue,
+)
 from mp_renderd.task import Task
 
-from nose.tools import raises, eq_
+from nose.tools import raises, eq_, assert_raises
 
 def task(name, priority=None):
     return Task(id=name, doc=name, priority=priority)
@@ -27,6 +33,24 @@ class TestPriorityTaskQueue(object):
     def test_pop_empty(self):
         q = PriorityTaskQueue()
         q.pop()
+
+    def test_peek(self):
+        q = PriorityTaskQueue()
+
+        t1 = task('foo')
+        q.add(t1)
+        eq_(q.peek(), t1)
+        eq_(q.peek(), t1)
+
+        t2 = task('foo')
+        q.add(t2)
+        eq_(q.peek(), t1)
+
+        eq_(q.pop(), t1)
+        eq_(q.peek(), t2)
+        eq_(q.pop(), t2)
+
+        assert_raises(IndexError, q.peek)
 
     def test_add_prio(self):
         q = PriorityTaskQueue() # default_priority = 50
@@ -150,6 +174,16 @@ class TestRenderQueue(object):
         q = RenderQueue([10], default_priority=50)
         q.add(task('foo', 0))
 
+    def test_has_running_tasks(self):
+        q = RenderQueue([0, 0], default_priority=50)
+        t1 = task('foo', 0)
+        q.add(t1)
+        assert not q.has_running_tasks()
+        eq_(q.next(), t1)
+        assert q.has_running_tasks()
+        eq_(q.remove('foo'), [t1])
+        assert not q.has_running_tasks()
+
     def test_already_running(self):
         q = RenderQueue([0, 0], default_priority=50)
         t1 = task('foo', 0)
@@ -166,6 +200,8 @@ class TestRenderQueue(object):
         eq_(q.waiting, 1)
 
         assert not q.already_running(t1)
+        # t2 has same id as t1, so it is already
+        # running since t1 is running
         assert q.already_running(t2)
         eq_(q.next(), t2)
         eq_(q.running, 1)
@@ -221,4 +257,30 @@ class TestRenderQueue(object):
         q.remove(tl2.id)
         assert q.has_new_tasks()
         eq_(q.next(), tl3)
+
+
+class TestFanInQueue(object):
+    def test(self):
+        q1 = Queue.Queue()
+        q2 = Queue.Queue()
+        q3 = Queue.Queue()
+
+        result = fan_in_queue([q1, q2, q3])
+
+        q2.put(2)
+        q1.put(1)
+        q3.put(3)
+
+        results = set([
+            result.get(),
+            result.get(),
+            result.get(),
+        ])
+
+        eq_(results, set([
+            (q1, 1),
+            (q2, 2),
+            (q3, 3),
+        ]))
+
 
