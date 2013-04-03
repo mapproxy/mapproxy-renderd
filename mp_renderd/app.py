@@ -20,7 +20,7 @@ import atexit
 import optparse
 import multiprocessing
 
-from mp_renderd.wsgi import RenderdApp
+from mp_renderd.wsgi import RenderdApp, CherryPyWSGIServer
 from mp_renderd.broker import Broker, WorkerPool, SeedWorker, RenderQueue
 from mapproxy.config.loader import load_configuration
 
@@ -114,7 +114,6 @@ def main():
 
         app = RenderdApp(broker)
 
-        from mp_renderd.wsgi import CherryPyWSGIServer
         server = CherryPyWSGIServer(
                 ('127.0.0.1', broker_port), app,
                 numthreads=64,
