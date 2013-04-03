@@ -30,7 +30,7 @@ try:
 except ImportError:
     from mp_renderd.ext.wsgiserver import CherryPyWSGIServer
 
-__all__ = ['CherryPyWSGIServer', 'Request']
+__all__ = ['CherryPyWSGIServer', 'RenderdApp']
 
 class Request(_Request):
     _body = None
@@ -50,7 +50,7 @@ class RenderdApp(object):
         try:
             if req.path == '/':
                 resp = self.do_request(req)
-            elif req.path == '/status':
+            elif req.path == '/_status':
                 resp = self.do_status(req)
             else:
                 resp = Response(json.dumps({'status': 'error', 'error_message': 'endpoint not found'}),
