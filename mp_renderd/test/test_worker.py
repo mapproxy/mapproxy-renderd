@@ -70,7 +70,7 @@ class ExceptionWorker(BaseWorker):
     def do_exception(self, doc):
         raise ValueError('foo')
 
-class TestSleepWorker(object):
+class TestExceptionWorker(object):
     def setup(self):
         self.in_queue = multiprocessing.Queue(2)
         self.out_queue = multiprocessing.Queue(2)
@@ -119,8 +119,6 @@ class TestSeedWorker(object):
         eq_(result.doc, {'status': 'error', 'error_message': "unknown cache 'unknown'"})
 
         eq_(self.caches['test_cache'].requested_tiles, [])
-
-
 
     def test_start_create_tiles_stop(self):
         # use manager.list to receive requested_tiles from worker process
