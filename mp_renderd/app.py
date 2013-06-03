@@ -52,7 +52,7 @@ def fatal(msg):
 
 def main():
     parser = optparse.OptionParser()
-    parser.add_option("-f", "--proxy-conf",
+    parser.add_option("-f", "--mapproxy-conf",
         dest="conf_file", default='mapproxy.yaml',
         help="MapProxy configuration")
     parser.add_option("--renderer", default=None, type=int,
