@@ -21,7 +21,10 @@ import optparse
 import multiprocessing
 
 from mp_renderd.wsgi import RenderdApp, CherryPyWSGIServer
-from mp_renderd.broker import Broker, WorkerPool, SeedWorker, RenderQueue
+from mp_renderd.broker import Broker
+from mp_renderd.pool import WorkerPool
+from mp_renderd.worker import SeedWorker
+from mp_renderd.queue import RenderQueue
 from mapproxy.config.loader import load_configuration
 
 import logging
