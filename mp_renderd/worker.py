@@ -85,7 +85,7 @@ class SeedWorker(BaseWorker):
         BaseWorker.__init__(self, **kw)
 
     def do_tile(self, doc):
-        from mapproxy.util import local_base_config
+        from mapproxy.config.config import local_base_config
 
         cache = self.caches.get(doc['cache_identifier'])
         if not cache:
