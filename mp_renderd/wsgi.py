@@ -20,6 +20,7 @@ import textwrap
 from mp_renderd.task import Task
 from mapproxy.request.base import Request as _Request
 from mapproxy.response import Response
+from mapproxy.util.lock import LockTimeout
 
 import logging
 log = logging.getLogger(__name__)
@@ -55,6 +56,9 @@ class RenderdApp(object):
             else:
                 resp = Response(json.dumps({'status': 'error', 'error_message': 'endpoint not found'}),
                     content_type='application/json', status=404)
+        except LockTimeout, ex:
+            resp = Response(json.dumps({'status': 'lock', 'error_message': 'lock timeout error: %s' % ex.args[0]}),
+                content_type='application/json', status=503)
         except Exception, ex:
             resp = Response(json.dumps({'status': 'error', 'error_message': 'internal error: %s' % ex.args[0]}),
                 content_type='application/json', status=500)
