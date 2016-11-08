@@ -19,6 +19,7 @@ import traceback
 import uuid
 
 from mp_renderd.queue import STOP
+from mapproxy.util.lock import LockTimeout
 
 import logging
 log = logging.getLogger(__name__)
@@ -62,6 +63,13 @@ class BaseWorker(multiprocessing.Process):
                 resp = method(req_doc)
                 if resp is None:
                     resp = {}
+            except LockTimeout, ex:
+                resp = {
+                    'status': 'lock',
+                    'error_message': "lock timeout while processing '%s': %s"
+                        % (command, ex),
+                    'error_detail': traceback.format_exc()
+                }
             except Exception, ex:
                 resp = {
                     'status': 'error',
